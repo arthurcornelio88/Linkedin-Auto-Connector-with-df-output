@@ -1,3 +1,4 @@
+#test
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -306,7 +307,6 @@ def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, inc
     hyphenated_keyword = "-".join(keyword.split())
     # Include the timestamp in the filename and save within the folder
     filename = os.path.join(folder_name, f'{time_str}_linkedin-name-url_keyword_{hyphenated_keyword}.xlsx')
-
 
     df.to_excel(filename, index=False)
 
