@@ -10,6 +10,12 @@ from selenium.webdriver.common.action_chains import ActionChains
 from colorama import Fore, Style, init
 import time, requests
 from urllib.parse import quote
+import pandas as pd
+import re #Arthur's modif
+import nltk #Arthur's modif
+import datetime #Arthur's modif
+import os #Arthur's modif
+from urllib.parse import unquote #Arthur's modif
 
 # Initialize colorama
 init(autoreset=True)
@@ -19,12 +25,20 @@ config = ConfigParser()
 config_file = 'setup.ini'
 config.read(config_file)
 
+#Arthur's modif
+linkedin_url_list = []
+linkedin_profile_name = []
+#End modif
+
+# Download necessary NLTK resources (run this once)
+nltk.download('punkt')
+
 def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument("--log-level=2")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    
+
     # service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome( options=chrome_options)
     return driver
@@ -79,7 +93,7 @@ def login_with_credentials(driver:webdriver.Chrome, email:str, password:str):
     driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
     WebDriverWait(driver, 10).until(
-        lambda d: d.find_element(By.ID, "global-nav-typeahead") or 
+        lambda d: d.find_element(By.ID, "global-nav-typeahead") or
         "Enter the code" in d.page_source
     )
 
@@ -93,8 +107,41 @@ def login_with_credentials(driver:webdriver.Chrome, email:str, password:str):
     print(Fore.GREEN + "[INFO] Logged in with credentials successfully.")
     save_cookie(driver)
 
-def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, include_notes: bool, message_letter:str):
+def extract_name(url):
+    """
+    Extracts the name from a LinkedIn profile URL, using a combination of regex and NLP.
+
+    Args:
+        url: The LinkedIn profile URL.
+
+    Returns:
+        The extracted name, or None if not found.
+    """
+
+    # Split the URL at '?' to remove query parameters
+    base_url = url.split('?')[0]
+
+    # Use a regular expression to find the name, allowing for hyphens and spaces
+    match = re.search(r"in/([\w ]+(?:-[^\d\W]+)*)(?!\d+)", base_url)
+
+    if match:
+        name = unquote(match.group(1).replace("-", " "))
+        name = name.replace("%20", " ")
+
+        # Attempt further splitting using NLP if the name contains no spaces
+        # or has more than 3 consecutive word characters (potential concatenation)
+        if " " not in name or re.search(r"\w{4,}", name):
+            words = nltk.word_tokenize(name)
+            name = " ".join(words)
+
+        return ' '.join(word.capitalize() for word in name.split())
+    else:
+        return None
+#End modif
+
+def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, include_notes: bool, message_letter:str, keyword:str, location:str, connection_degree:str):
     """Send a connection request to the specified LinkedIn profile"""
+
     try:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)  # Wait for the page to load
@@ -135,11 +182,11 @@ def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, inc
                     # print("Connect Button : ", connect_button)
                     cnt += 1
                     actions.move_to_element(connect_button).perform()
-                    time.sleep(1) 
+                    time.sleep(1)
                     connect_button.click()
-                    
+
                     time.sleep(1)  # Adjust based on how quickly the modal appears
-                    
+
                     if not include_notes:
                         WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//button[@aria-label="Send without a note"]'))).click()
                     else:
@@ -153,6 +200,11 @@ def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, inc
                         driver.execute_script("arguments[0].click();", send_button)
 
                     print(Fore.GREEN + f"[INFO] Connection request sent successfully to {linkedin_url}")
+                    print("Calling extract_name...")  # Debug print
+                    name_in_url = extract_name(linkedin_url)
+                    linkedin_url_list.append(linkedin_url)
+                    linkedin_profile_name.append(name_in_url)
+                    print(f"Appended URL: {linkedin_url}, Name: {name_in_url}")  # Debug print
                     print("---------------------------------------------------------------------------------------------------------------")
                     time.sleep(10)  # Wait for the action to complete before proceeding
                 elif message_letter != "":
@@ -162,7 +214,7 @@ def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, inc
                     connect_button = connect_buttons[cnt]
                     cnt += 1
                     actions.move_to_element(connect_button).perform()
-                    time.sleep(1) 
+                    time.sleep(1)
                     connect_button.click()
                     time.sleep(2)
 
@@ -184,6 +236,11 @@ def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, inc
                     time.sleep(2)
 
                     print(Fore.GREEN + f"[INFO] Connection request sent successfully to {linkedin_url}")
+                    print("Calling extract_name...")  # Debug print
+                    name_in_url = extract_name(linkedin_url)
+                    linkedin_url_list.append(linkedin_url)
+                    linkedin_profile_name.append(name_in_url)
+                    print(f"Appended URL: {linkedin_url}, Name: {name_in_url}")  # Debug print
                     print("---------------------------------------------------------------------------------------------------------------")
                     time.sleep(10)
             except Exception as e:
@@ -215,11 +272,51 @@ def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, inc
                 except Exception as e:
                     print(e)
                     break
-                
     except Exception as e:
         print(Fore.RED + f"[INFO] No profile found or an error occurred. Details: {e}")
-        driver.quit()
-      
+
+    #Arthur modif
+    # Create and save the DataFrame here
+    df = pd.DataFrame({'Linkedin Profile name': linkedin_profile_name, 'Linkedin URL': linkedin_url_list})
+
+    # Create the new row DataFrame
+    new_row_data = {
+    'Linkedin Profile name': 'Connexion degre / Keywords / Location',
+    'Linkedin URL': connection_degree + " " + keyword + " " + location
+    }
+    new_row_df = pd.DataFrame([new_row_data])
+
+    #   Concatenate the new row and the original DataFrame
+    updated_df = pd.concat([new_row_df, df], ignore_index=True)
+
+    # Update the original DataFrame
+    df = updated_df
+
+    # Get the current date and time
+    now = datetime.datetime.now()
+    date_str = now.strftime("%Y%m%d")  # Format for folder name
+    time_str = now.strftime("%H-%M-%S")  # Format for filename
+
+    # Create the folder if it doesn't exist
+    folder_name = "data/" + date_str
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+
+    #hyphenating keywords
+    hyphenated_keyword = "-".join(keyword.split())
+    # Include the timestamp in the filename and save within the folder
+    filename = os.path.join(folder_name, f'{time_str}_linkedin-name-url_keyword_{hyphenated_keyword}.xlsx')
+
+
+    df.to_excel(filename, index=False)
+
+    print(df)
+    print(f"DataFrame saved to {filename}")  # Debug print
+
+    driver.quit()  # Quit the driver here as well
+    #End modif
+
+
 def main():
     print(Fore.CYAN + "[-] Please enter your search criteria:")
     message = ''
@@ -252,11 +349,11 @@ def main():
         email = config.get('LinkedIn', 'email')
         password = config.get('LinkedIn', 'password')
         login_with_credentials(driver, email, password)
-    
+
     network_mapping = {
-        "1st": "%5B%22F%22%5D",  
-        "2nd": "%5B%22S%22%5D",  
-        "3rd": "%5B%22O%22%5D"   
+        "1st": "%5B%22F%22%5D",
+        "2nd": "%5B%22S%22%5D",
+        "3rd": "%5B%22O%22%5D"
     }
     network_code = network_mapping.get(connection_degree, "")
 
@@ -266,7 +363,7 @@ def main():
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "global-nav-typeahead")))
     if location != "":
         select_location(driver, location)
-    send_connection_request(driver=driver, limit=limit, letter=message, include_notes=include_note, message_letter=message_letter)
+    send_connection_request(driver=driver, limit=limit, letter=message, include_notes=include_note, message_letter=message_letter, keyword=keyword, location=location, connection_degree=connection_degree)
     driver.quit()
 
 if __name__ == "__main__":

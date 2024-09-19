@@ -140,6 +140,12 @@ venv.bak/
 # mkdocs documentation
 /site
 
+#data folders
+/data/*
+
+#message linkedin
+message.txt
+
 # mypy
 .mypy_cache/
 .dmypy.json
