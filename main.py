@@ -1,4 +1,3 @@
-#test
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -39,6 +38,7 @@ def setup_driver():
     chrome_options.add_argument("--log-level=2")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("lang=en-US")
 
     # service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome( options=chrome_options)
@@ -313,7 +313,7 @@ def send_connection_request(driver: webdriver.Chrome, limit:str, letter:str, inc
     print(df)
     print(f"DataFrame saved to {filename}")  # Debug print
 
-    driver.quit()  # Quit the driver here as well
+    #driver.quit()  # Quit the driver here as well
     #End modif
 
 
